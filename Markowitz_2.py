@@ -70,7 +70,74 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
+        # Advanced Momentum-Volatility Strategy
+        # Combines momentum, volatility adjustment, and sector rotation
         
+        # Use shorter lookback for more responsive strategy
+        momentum_window = 20  # 1 month momentum
+        volatility_window = 60  # 3 month volatility
+        min_periods = max(momentum_window, volatility_window)
+        
+        for i in range(min_periods, len(self.price)):
+            # Get current date
+            current_date = self.price.index[i]
+            
+            # Calculate momentum scores (price momentum + return momentum)
+            price_window = self.price[assets].iloc[i-momentum_window:i+1]
+            returns_window = self.returns[assets].iloc[i-momentum_window:i+1]
+            
+            # Price momentum: current price / average price
+            avg_prices = price_window.mean()
+            current_prices = self.price[assets].iloc[i]
+            price_momentum = (current_prices / avg_prices) - 1
+            
+            # Return momentum: cumulative returns
+            return_momentum = returns_window.sum()
+            
+            # Combined momentum score
+            momentum_score = 0.6 * price_momentum + 0.4 * return_momentum
+            
+            # Calculate volatility for risk adjustment
+            volatility = self.returns[assets].iloc[i-volatility_window:i].std() * np.sqrt(252)
+            volatility = volatility.replace(0, volatility.mean())  # Handle zero volatility
+            
+            # Risk-adjusted momentum (momentum per unit of risk)
+            risk_adjusted_momentum = momentum_score / volatility
+            
+            # Additional factor: recent performance (last 5 days)
+            recent_returns = self.returns[assets].iloc[i-5:i].sum()
+            
+            # Combined score with momentum, volatility adjustment, and recent performance
+            combined_score = (0.5 * risk_adjusted_momentum + 
+                            0.3 * momentum_score + 
+                            0.2 * recent_returns)
+            
+            # Select top assets (top 60% of assets by score)
+            n_select = max(3, int(len(assets) * 0.6))  # At least 3 assets, max 60% of total
+            top_assets = combined_score.nlargest(n_select).index
+            
+            # Calculate weights using modified risk parity for selected assets
+            selected_volatility = volatility[top_assets]
+            
+            # Inverse volatility weights with momentum boost
+            inv_vol_weights = 1.0 / selected_volatility
+            momentum_boost = 1 + (combined_score[top_assets] - combined_score[top_assets].min()) / (combined_score[top_assets].max() - combined_score[top_assets].min() + 1e-8)
+            
+            # Apply momentum boost to weights
+            adjusted_weights = inv_vol_weights * momentum_boost
+            
+            # Normalize weights to sum to 1
+            final_weights = adjusted_weights / adjusted_weights.sum()
+            
+            # Assign weights
+            for asset in assets:
+                if asset in top_assets:
+                    self.portfolio_weights.loc[current_date, asset] = final_weights[asset]
+                else:
+                    self.portfolio_weights.loc[current_date, asset] = 0.0
+            
+            # Set excluded asset to 0
+            self.portfolio_weights.loc[current_date, self.exclude] = 0.0
         
         """
         TODO: Complete Task 4 Above

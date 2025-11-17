@@ -62,7 +62,16 @@ class EqualWeightPortfolio:
         """
         TODO: Complete Task 1 Below
         """
-
+        # In equal weight portfolio, each asset gets equal allocation
+        # Calculate equal weight for each asset (1/number of assets)
+        equal_weight = 1.0 / len(assets)
+        
+        # Assign equal weights to all assets except the excluded one
+        for asset in assets:
+            self.portfolio_weights[asset] = equal_weight
+        
+        # Set weight for excluded asset to 0
+        self.portfolio_weights[self.exclude] = 0.0        
         """
         TODO: Complete Task 1 Above
         """
@@ -106,16 +115,22 @@ class RiskParityPortfolio:
     def calculate_weights(self):
         # Get the assets by excluding the specified column
         assets = df.columns[df.columns != self.exclude]
-
-        # Calculate the portfolio weights
         self.portfolio_weights = pd.DataFrame(index=df.index, columns=df.columns)
 
         """
         TODO: Complete Task 2 Below
         """
-
-
-
+        # Get volatility (standard deviation) over the lookback period
+        for i in range(self.lookback + 1, len(df)):
+            R_n = df_returns.copy()[assets].iloc[i - self.lookback : i]
+            volatility = R_n.std()
+            inv_volatility = 1.0 / volatility
+            weights = inv_volatility / inv_volatility.sum()
+            for asset in assets:
+                self.portfolio_weights.loc[df.index[i], asset] = weights[asset]
+            # Set excluded asset to 0
+            self.portfolio_weights.loc[df.index[i], self.exclude] = 0.0
+            
         """
         TODO: Complete Task 2 Above
         """
@@ -187,12 +202,22 @@ class MeanVariancePortfolio:
                 """
                 TODO: Complete Task 3 Below
                 """
-
-                # Sample Code: Initialize Decision w and the Objective
-                # NOTE: You can modify the following code
-                w = model.addMVar(n, name="w", ub=1)
-                model.setObjective(w.sum(), gp.GRB.MAXIMIZE)
-
+                # Decision variables: portfolio weights
+                # Lower bound = 0 for long-only constraint, upper bound = 1 to prevent excessive allocation
+                w = model.addMVar(n, name="w", ub=1.0)
+        
+                # Objective function: maximize w^T*μ - (γ/2)*w^T*Σ*w
+                # Expected return term: w^T * μ
+                expected_return = w @ mu
+                
+                # Risk term: (γ/2) * w^T * Σ * w (quadratic form)
+                risk_penalty = 0.5 * gamma * w @ Sigma @ w
+                
+                # Set objective to maximize expected return minus risk penalty
+                model.setObjective(expected_return - risk_penalty, gp.GRB.MAXIMIZE)
+                
+                # Constraint: sum of weights equals 1 (no leverage constraint)
+                model.addConstr(w.sum() == 1.0, name="budget_constraint")
                 """
                 TODO: Complete Task 3 Above
                 """
